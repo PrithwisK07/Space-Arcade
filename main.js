@@ -931,7 +931,6 @@ function collision_mechanism(object, game, player) {
       }
 
       if (object.damage === 1) {
-=======
       if (!game.player.shield && !game.player.isDead) {
         game.player.health -= 25;
         if (game.player.health <= 0) {
@@ -1146,4 +1145,5 @@ function drawLeaderboardOverlay() {
   context.fillStyle = '#aaa';
   context.fillText('Press Ctrl+R to close', canvas.width/2, canvas.height/2+110);
   context.restore();
+}
 }
