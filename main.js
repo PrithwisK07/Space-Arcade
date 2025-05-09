@@ -151,6 +151,7 @@ class Player {
 
   shoot() {
     const projectile = this.game.getProjectiles();
+    this.game.shootSound.play();
     if (projectile) {
       projectile.start(this.x + this.width / 2, this.y);
       playSFX(sfx_shoot);
@@ -398,6 +399,7 @@ class Invaders {
         this.y + this.height / 2,
         invader
       );
+      this.game.enemyDeathSound.play();
     }
   }
 }
@@ -600,6 +602,7 @@ class Explosions {
       } else {
         this.animationTimer += deltaTime;
       }
+      this.game.explosionSound.play();
     }
   }
 
@@ -629,6 +632,13 @@ class Explosions {
 // Main Game class or the brain of the game
 class Game {
   constructor() {
+
+    // Loading sound files
+    this.shootSound = new Audio("assets/audio/shoot.mp3");
+    this.explosionSound = new Audio("assets/audio/explosion.mp3");
+    this.enemyDeathSound = new Audio("assets/audio/enemy-death.mp3");
+    this.playerHitSound = new Audio("assets/audio/player-hit.mp3");
+
     this.width = canvas.width;
     this.height = canvas.height;
 
@@ -874,7 +884,8 @@ function collision_mechanism(object, game, player) {
         ) {
           if (invader.lives <= 1) {
             invader.explode(invader);
-            game.score += invader.maxLives;
+            
+            game.score += invader.maxLives; // Increase score for killing an enemy
             // Power-up drop chance
             if (Math.random() < 0.25) {
               game.spawnPowerUp(
@@ -882,14 +893,15 @@ function collision_mechanism(object, game, player) {
                 invader.y + invader.height / 2
               );
             }
+            
             grid.invaderArray.splice(grid.invaderArray.indexOf(invader), 1);
           } else {
-            if (object.animationTimer % object.animationInterval == 0) {
+            if (object.animationTimer % object.animationInterval === 0) {
               invader.lives -= object.damage;
               object.animationTimer = 0;
             }
           }
-          if (object.damage == 1) {
+          if (object.damage === 1) {
             object.reset();
           }
           return true;
@@ -897,13 +909,29 @@ function collision_mechanism(object, game, player) {
       });
     });
   } else {
+    // Player takes damage from enemy projectile
+
     if (game.player.isDead) return false;
+
     if (
       object.y < game.player.y + game.player.height &&
       object.y + object.height > game.player.y &&
       object.x + object.width > game.player.x &&
       object.x < game.player.x + game.player.width
     ) {
+
+      game.player.health -= object.damage; // Reduce player health
+      game.score -= 5; // Decrease score when the player is hit
+      if (game.score < 0) game.score = 0; // Prevent negative scores
+
+      try {
+        game.playerHitSound.play(); // Play hit sound
+      } catch (error) {
+        console.error("Error playing sound:", error);
+      }
+
+      if (object.damage === 1) {
+=======
       if (!game.player.shield && !game.player.isDead) {
         game.player.health -= 25;
         if (game.player.health <= 0) {
