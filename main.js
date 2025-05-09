@@ -26,9 +26,21 @@ class Player {
     this.invulnerabilityDuration = 1000; // 1 second of invulnerability after taking damage
     this.hitEffectTimer = 0;
     this.hitEffectDuration = 100; // Duration of the hit effect
+    this.activePowerUps = [];
+    this.rapidFire = false;
+    this.shield = false;
+    this.doubleScore = false;
+    this.powerUpTimers = {};
+    this.lives = 3;
+    this.isDead = false;
+    this.respawnTimer = 0;
+    this.respawnDelay = 1500;
   }
 
   draw(deltaTime) {
+    // Hide player and health bar if dead (during respawn delay)
+    if (this.isDead) return;
+
     /* The laser beam energy level bar */
     let currentEnergy = Math.floor(this.maxEnergy - this.energyUsed);
 
@@ -189,13 +201,58 @@ class Player {
       this.width,
       this.height
     );
+
+    // Draw active power-ups
+    let puX = 10, puY = 70;
+    this.activePowerUps.forEach((pu, i) => {
+      const typeObj = POWERUP_TYPES.find(t => t.type === pu.type);
+      context.save();
+      context.globalAlpha = 0.8;
+      context.beginPath();
+      context.arc(puX + i * 38, puY, 16, 0, Math.PI * 2);
+      context.fillStyle = typeObj.color;
+      context.fill();
+      context.globalAlpha = 1;
+      context.font = "1rem bold";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillStyle = "#222";
+      context.fillText(typeObj.icon, puX + i * 38, puY + 1);
+      // Timer
+      if (typeObj.duration > 0) {
+        context.font = "0.7rem monospace";
+        context.fillStyle = "#fff";
+        context.fillText(
+          Math.ceil(this.powerUpTimers[pu.type] / 1000),
+          puX + i * 38,
+          puY + 18
+        );
+      }
+      context.restore();
+    });
+
+    // Draw health bar above player
+    const barWidth = this.width;
+    const barHeight = 12;
+    const healthRatio = this.health / this.maxHealth;
+    context.save();
+    context.beginPath();
+    context.fillStyle = '#222';
+    context.fillRect(this.x, this.y - barHeight - 6, barWidth, barHeight);
+    context.fillStyle = healthRatio > 0.5 ? '#0f0' : healthRatio > 0.2 ? '#ff0' : '#f00';
+    context.fillRect(this.x, this.y - barHeight - 6, barWidth * healthRatio, barHeight);
+    context.strokeStyle = '#fff';
+    context.lineWidth = 2;
+    context.strokeRect(this.x, this.y - barHeight - 6, barWidth, barHeight);
     context.restore();
   }
 
   shoot() {
     const projectile = this.game.getProjectiles();
+    this.game.shootSound.play();
     if (projectile) {
       projectile.start(this.x + this.width / 2, this.y);
+      playSFX(sfx_shoot);
     }
   }
 
@@ -240,6 +297,18 @@ class Player {
       this.hitEffectTimer -= deltaTime;
     }
 
+    if (this.isDead) {
+      this.respawnTimer += deltaTime;
+      if (this.respawnTimer > this.respawnDelay) {
+        this.isDead = false;
+        this.respawnTimer = 0;
+        this.health = this.maxHealth;
+        this.x = this.game.width / 2 - this.width / 2;
+        this.y = this.game.height * 0.98 - this.height;
+      }
+      return;
+    }
+    this.updatePowerUps(deltaTime);
     if (
       (this.game.keys.includes("a") || this.game.keys.includes("ArrowLeft")) &&
       this.x > 0
@@ -256,6 +325,38 @@ class Player {
       this.playerJetsFrameX = 1;
     }
     this.draw(deltaTime);
+  }
+
+  collectPowerUp(powerUp) {
+    if (powerUp.type === "health_restore") {
+      this.health = Math.min(this.maxHealth, this.health + 40);
+      playSFX(sfx_powerup);
+    } else {
+      this.activePowerUps.push({
+        type: powerUp.type,
+        expires: Date.now() + powerUp.duration
+      });
+      this.powerUpTimers[powerUp.type] = powerUp.duration;
+      if (powerUp.type === "rapid_fire") this.rapidFire = true;
+      if (powerUp.type === "shield") this.shield = true;
+      if (powerUp.type === "double_score") this.doubleScore = true;
+      playSFX(sfx_powerup);
+    }
+  }
+
+  updatePowerUps(deltaTime) {
+    const now = Date.now();
+    this.activePowerUps = this.activePowerUps.filter(pu => {
+      if (now < pu.expires) {
+        this.powerUpTimers[pu.type] -= deltaTime;
+        return true;
+      } else {
+        if (pu.type === "rapid_fire") this.rapidFire = false;
+        if (pu.type === "shield") this.shield = false;
+        if (pu.type === "double_score") this.doubleScore = false;
+        return false;
+      }
+    });
   }
 }
 
@@ -305,6 +406,7 @@ class Projectile {
     this.x = x - this.width / 2;
     this.y = y - this.height;
     this.free = false;
+    playSFX(sfx_shoot);
   }
 
   reset() {
@@ -467,6 +569,11 @@ class Invaders {
   update(dx, dy, deltaTime) {
     if (this.y < this.pseudoy) this.y += 0.5; // Provides the drive in look.
     this.x += dx;
+    if (this.y < this.pseudoy) this.y += 0.5;
+    // Zig-zag movement
+    const zigzagAmplitude = 30;
+    const zigzagFrequency = 0.002;
+    this.x += dx + Math.sin(Date.now() * zigzagFrequency + this.pseudoy) * 1.5;
     this.y += dy;
 
     // Update hit effect timer
@@ -521,6 +628,7 @@ class Invaders {
         this.y + this.height / 2,
         invader
       );
+      this.game.enemyDeathSound.play();
     }
   }
 }
@@ -662,7 +770,7 @@ class Grid {
       );
     }
 
-    let shootInterval = setInterval(() => {
+    this.shootInterval = setInterval(() => {
       this.invaderArray.forEach((invader) => {
         if (Math.random() < 0.3) {
           invader.shoot();
@@ -745,6 +853,7 @@ class Explosions {
       } else {
         this.animationTimer += deltaTime;
       }
+      this.game.explosionSound.play();
     }
   }
 
@@ -752,6 +861,7 @@ class Explosions {
     this.x = x - this.width / 2;
     this.y = y - this.height / 2;
     this.free = false;
+    playSFX(sfx_explosion);
     if (invader.type == "rhinomorph") {
       this.frameY = 0;
       this.game.playSound("explosion");
@@ -773,6 +883,13 @@ class Explosions {
 // Main Game class or the brain of the game
 class Game {
   constructor() {
+
+    // Loading sound files
+    this.shootSound = new Audio("assets/audio/shoot.mp3");
+    this.explosionSound = new Audio("assets/audio/explosion.mp3");
+    this.enemyDeathSound = new Audio("assets/audio/enemy-death.mp3");
+    this.playerHitSound = new Audio("assets/audio/player-hit.mp3");
+
     this.width = canvas.width;
     this.height = canvas.height;
 
@@ -849,11 +966,21 @@ class Game {
       if (e.key === "r" && this.gameOver) {
         this.reset();
       }
+      if (e.key.toLowerCase() === "r" && this.showGameOverScreen) {
+        this.restart();
+      }
     });
     window.addEventListener("keyup", (e) => {
       if (this.keys.indexOf(e.key) > -1)
         this.keys.splice(this.keys.indexOf(e.key), 1);
     });
+
+    this.powerUps = [];
+    this.powerUpSpawnTimer = 0;
+    this.powerUpSpawnInterval = 8000 + Math.random() * 4000;
+    this.gameOver = false;
+    this.showGameOverScreen = false;
+    this.leaderboardHandled = false;
   }
 
   setupSoundToggle() {
@@ -959,6 +1086,28 @@ class Game {
       context.font = "1.5rem sans-serif";
       context.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 50);
       context.fillText("Press R to restart", this.width / 2, this.height / 2 + 100);
+    context.font = "1.5rem impact";
+    context.fillText(`SCORE:  ${this.score}`, 10, 25);
+    // Draw lives
+    context.font = "1.2rem impact";
+    context.fillStyle = "#f44";
+    context.fillText(`LIVES: ${this.player.lives}`, 10, 55);
+    context.restore();
+    // Game Over screen
+    if (this.showGameOverScreen) {
+      context.save();
+      context.globalAlpha = 0.85;
+      context.fillStyle = '#000';
+      context.fillRect(0, 0, this.width, this.height);
+      context.globalAlpha = 1;
+      context.fillStyle = '#fff';
+      context.font = '3rem impact';
+      context.textAlign = 'center';
+      context.fillText('GAME OVER', this.width / 2, this.height / 2 - 40);
+      context.font = '2rem impact';
+      context.fillText(`Final Score: ${this.score}`, this.width / 2, this.height / 2 + 10);
+      context.font = '1.5rem impact';
+      context.fillText('Press R to Restart', this.width / 2, this.height / 2 + 60);
       context.restore();
     }
   }
@@ -1004,7 +1153,97 @@ class Game {
       }
     } else {
       this.draw();
+    if (this.showGameOverScreen) {
+      // Leaderboard logic
+      if (!this.leaderboardHandled) {
+        if (isHighScore(this.score)) {
+          let name = prompt('New High Score! Enter your name:','Player');
+          if (!name) name = 'Player';
+          addHighScore(name, this.score);
+        }
+        this.leaderboardHandled = true;
+      }
+      this.draw();
+      pauseBGM();
+      // Draw leaderboard overlay if toggled
+      if (showLeaderboard || this.showGameOverScreen) {
+        drawLeaderboardOverlay();
+      }
+      return;
     }
+    this.draw();
+    if (!this.player.isDead) this.player.update(deltaTime);
+    this.projectileArray.forEach((projectile) => {
+      projectile.draw();
+      projectile.update(8.5);
+    });
+    this.enemyProjectileArray.forEach((projectile) => {
+      projectile.draw();
+      projectile.update(-8.5);
+    });
+    this.explosionsArray.forEach((explosion) => {
+      explosion.update(deltaTime);
+    });
+    // Remove empty grids
+    for (let i = this.gridArray.length - 1; i >= 0; i--) {
+      const grid = this.gridArray[i];
+      if (grid.invaderArray.length == 0) {
+        if (grid.shootInterval) clearInterval(grid.shootInterval);
+        this.gridArray.splice(i, 1);
+      } else {
+        grid.invaderArray.forEach((invader) => {
+          invader.create();
+        });
+        grid.update(deltaTime);
+      }
+    }
+    // Always spawn a new grid if none exist and game is not over
+    if (this.gridArray.length === 0 && !this.showGameOverScreen) {
+      // Failsafe: forcibly spawn a new grid regardless of state
+      this.bossActivated = false;
+      this.gridArray = [new Grid(this)];
+      this.waveCount++;
+    }
+    // Power-up spawn logic (random drop or timer)
+    this.powerUpSpawnTimer += deltaTime;
+    if (this.powerUpSpawnTimer > this.powerUpSpawnInterval) {
+      // Random spawn location
+      const x = 40 + Math.random() * (this.width - 80);
+      this.spawnPowerUp(x, 0);
+      this.powerUpSpawnTimer = 0;
+      this.powerUpSpawnInterval = 8000 + Math.random() * 4000;
+    }
+
+    // Draw and update power-ups
+    this.powerUps.forEach(pu => {
+      pu.draw();
+      pu.update();
+    });
+    this.powerUps = this.powerUps.filter(pu => !pu.collected);
+  }
+
+  spawnPowerUp(x, y) {
+    // Randomly select a power-up type
+    const typeObj = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+    this.powerUps.push(new PowerUp(this, x, y, typeObj));
+  }
+
+  restart() {
+    this.score = 0;
+    this.waveCount = 1;
+    this.player.lives = 3;
+    this.player.health = this.player.maxHealth;
+    this.player.isDead = false;
+    this.player.x = this.width / 2 - this.player.width / 2;
+    this.player.y = this.height * 0.98 - this.player.height;
+    this.gridArray = [new Grid(this)];
+    this.projectileArray.forEach(p => p.reset());
+    this.enemyProjectileArray.forEach(p => p.reset());
+    this.explosionsArray.forEach(e => e.reset());
+    this.powerUps = [];
+    this.showGameOverScreen = false;
+    this.leaderboardHandled = false;
+    playBGM();
   }
 }
 
@@ -1036,11 +1275,20 @@ function collision_mechanism(object, game, player) {
         ) {
           if (invader.lives <= 1) {
             invader.explode(invader);
-            game.score += invader.maxLives;
+            
+            game.score += invader.maxLives; // Increase score for killing an enemy
+            // Power-up drop chance
+            if (Math.random() < 0.25) {
+              game.spawnPowerUp(
+                invader.x + invader.width / 2,
+                invader.y + invader.height / 2
+              );
+            }
+            
             grid.invaderArray.splice(grid.invaderArray.indexOf(invader), 1);
             game.playSound("enemyDeath");
           } else {
-            if (object.animationTimer % object.animationInterval == 0) {
+            if (object.animationTimer % object.animationInterval === 0) {
               invader.lives -= object.damage;
               invader.showHealthBar();
               object.animationTimer = 0;
@@ -1048,7 +1296,7 @@ function collision_mechanism(object, game, player) {
               game.playSound("explosion");
             }
           }
-          if (object.damage == 1) {
+          if (object.damage === 1) {
             object.reset();
           }
           return true;
@@ -1056,12 +1304,46 @@ function collision_mechanism(object, game, player) {
       });
     });
   } else {
+    // Player takes damage from enemy projectile
+
+    if (game.player.isDead) return false;
+
     if (
       object.y < game.player.y + game.player.height &&
       object.y + object.height > game.player.y &&
       object.x + object.width > game.player.x &&
       object.x < game.player.x + game.player.width
     ) {
+
+      game.player.health -= object.damage; // Reduce player health
+      game.score -= 5; // Decrease score when the player is hit
+      if (game.score < 0) game.score = 0; // Prevent negative scores
+
+      try {
+        game.playerHitSound.play(); // Play hit sound
+      } catch (error) {
+        console.error("Error playing sound:", error);
+      }
+
+      if (object.damage === 1) {
+      if (!game.player.shield && !game.player.isDead) {
+        game.player.health -= 25;
+        if (game.player.health <= 0) {
+          game.player.lives--;
+          if (game.player.lives > 0) {
+            game.player.isDead = true;
+            // Immediately respawn after short delay
+            setTimeout(() => {
+              game.player.isDead = false;
+              game.player.health = game.player.maxHealth;
+              game.player.x = game.width / 2 - game.player.width / 2;
+              game.player.y = game.height * 0.98 - game.player.height;
+            }, 600); // 600ms respawn delay
+          } else {
+            game.showGameOverScreen = true;
+          }
+        }
+      }
       if (object.damage == 1) {
         object.reset();
         game.player.takeDamage(5);
@@ -1070,4 +1352,195 @@ function collision_mechanism(object, game, player) {
       return true;
     }
   }
+}
+
+// --- POWER-UP SYSTEM ---
+const POWERUP_TYPES = [
+  {
+    type: "rapid_fire",
+    color: "#ff0",
+    duration: 7000,
+    icon: "⚡"
+  },
+  {
+    type: "shield",
+    color: "#0ff",
+    duration: 7000,
+    icon: "🛡️"
+  },
+  {
+    type: "double_score",
+    color: "#f0f",
+    duration: 7000,
+    icon: "✖2"
+  },
+  {
+    type: "health_restore",
+    color: "#0f0",
+    duration: 0,
+    icon: "❤"
+  }
+];
+
+class PowerUp {
+  constructor(game, x, y, typeObj) {
+    this.game = game;
+    this.x = x;
+    this.y = y;
+    this.radius = 18;
+    this.type = typeObj.type;
+    this.color = typeObj.color;
+    this.icon = typeObj.icon;
+    this.duration = typeObj.duration;
+    this.active = false;
+    this.collected = false;
+    this.timer = 0;
+    this.dy = 2 + Math.random();
+  }
+  draw() {
+    if (!this.collected) {
+      context.save();
+      context.beginPath();
+      context.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      context.fillStyle = this.color;
+      context.globalAlpha = 0.7;
+      context.fill();
+      context.globalAlpha = 1;
+      context.font = "1.2rem bold";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillStyle = "#222";
+      context.fillText(this.icon, this.x, this.y + 2);
+      context.restore();
+    }
+  }
+  update() {
+    if (!this.collected) {
+      this.y += this.dy;
+      // Remove if off screen
+      if (this.y - this.radius > this.game.height) this.collected = true;
+      // Collision with player
+      if (
+        this.x + this.radius > this.game.player.x &&
+        this.x - this.radius < this.game.player.x + this.game.player.width &&
+        this.y + this.radius > this.game.player.y &&
+        this.y - this.radius < this.game.player.y + this.game.player.height
+      ) {
+        this.collected = true;
+        this.game.player.collectPowerUp(this);
+      }
+    }
+  }
+}
+
+// --- AUDIO SYSTEM ---
+const bgm = document.getElementById('bgm');
+const sfx_shoot = document.getElementById('sfx_shoot');
+const sfx_explosion = document.getElementById('sfx_explosion');
+const sfx_powerup = document.getElementById('sfx_powerup');
+const muteBtn = document.getElementById('muteBtn');
+let isMuted = false;
+
+function playSFX(audio) {
+  if (!isMuted) {
+    audio.currentTime = 0;
+    audio.play();
+  }
+}
+
+function playBGM() {
+  if (!isMuted) {
+    bgm.volume = 0.5;
+    bgm.play();
+  }
+}
+
+function pauseBGM() {
+  bgm.pause();
+}
+
+muteBtn.onclick = function () {
+  isMuted = !isMuted;
+  bgm.muted = isMuted;
+  sfx_shoot.muted = isMuted;
+  sfx_explosion.muted = isMuted;
+  sfx_powerup.muted = isMuted;
+  muteBtn.textContent = isMuted ? '🔇' : '🔊';
+  if (!isMuted) playBGM();
+  else pauseBGM();
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  playBGM();
+});
+// --- END AUDIO SYSTEM ---
+
+// --- LEADERBOARD SYSTEM ---
+function getLeaderboard() {
+  return JSON.parse(localStorage.getItem('spaceArcadeLeaderboard') || '[]');
+}
+function saveLeaderboard(lb) {
+  localStorage.setItem('spaceArcadeLeaderboard', JSON.stringify(lb));
+}
+function addHighScore(name, score) {
+  let lb = getLeaderboard();
+  lb.push({ name, score });
+  lb = lb.sort((a, b) => b.score - a.score).slice(0, 5);
+  saveLeaderboard(lb);
+}
+function isHighScore(score) {
+  const lb = getLeaderboard();
+  return lb.length < 5 || score > lb[lb.length - 1].score;
+}
+
+// Add leaderboard button
+if (!document.getElementById('leaderboardBtn')) {
+  const btn = document.createElement('button');
+  btn.id = 'leaderboardBtn';
+  btn.textContent = '🏆';
+  btn.style.position = 'fixed';
+  btn.style.top = '10px';
+  btn.style.right = '50px';
+  btn.style.zIndex = 10;
+  btn.style.fontSize = '1.2rem';
+  document.body.appendChild(btn);
+}
+let showLeaderboard = false;
+document.getElementById('leaderboardBtn').onclick = () => {
+  showLeaderboard = !showLeaderboard;
+};
+
+// --- END LEADERBOARD SYSTEM ---
+
+// Draw leaderboard overlay function:
+function drawLeaderboardOverlay() {
+  const lb = getLeaderboard();
+  context.save();
+  context.globalAlpha = 0.92;
+  context.fillStyle = '#111';
+  context.fillRect(canvas.width/2-180, canvas.height/2-140, 360, 260);
+  context.globalAlpha = 1;
+  context.fillStyle = '#fff';
+  context.font = '2rem impact';
+  context.textAlign = 'center';
+  context.fillText('LEADERBOARD', canvas.width/2, canvas.height/2-100);
+  context.font = '1.3rem monospace';
+  lb.forEach((entry, i) => {
+    context.fillStyle = i === 0 ? '#ffd700' : '#fff';
+    context.fillText(
+      `${i+1}. ${entry.name.padEnd(10)}  ${entry.score}`,
+      canvas.width/2,
+      canvas.height/2-50 + i*35
+    );
+  });
+  if (lb.length === 0) {
+    context.fillStyle = '#fff';
+    context.font = '1.1rem monospace';
+    context.fillText('No high scores yet!', canvas.width/2, canvas.height/2-10);
+  }
+  context.font = '1rem monospace';
+  context.fillStyle = '#aaa';
+  context.fillText('Press Ctrl+R to close', canvas.width/2, canvas.height/2+110);
+  context.restore();
+}
 }
