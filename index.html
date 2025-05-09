@@ -4,31 +4,48 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Ultimate Space Arcade</title>
-    <style>
-      * {
-        margin: 0px;
-        padding: 0px;
-        box-sizing: border-box;
-        overflow: hidden;
-      }
-      img {
-        position: absolute;
-        display: none;
-      }
-      canvas {
-        background: url(/assets/background_1280x720.png);
-        background-size: cover;
-      }
-    </style>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <img src="assets/" id="boss" alt="boss" />
+    <!-- Hidden images for sprites -->
+    <img src="assets/boss.png" id="boss" alt="boss" />
     <img src="assets/explosions.png" id="explosions" alt="explosions" />
     <img src="assets/beetlemorph.png" id="beetlemorph" alt="beetlemorph" />
     <img src="assets/rhinomorph.png" id="rhinomorph" alt="rhinomorph" />
-    <img src="/assets/player.png" id="player" alt="player" />
-    <img src="/assets/player_jets.png" id="player_jets" alt="player_jets" />
-    <canvas width="0" height="0"></canvas>
+    <img src="assets/player.png" id="player" alt="player" />
+    <img src="assets/player_jets.png" id="player_jets" alt="player_jets" />
+
+    <!-- Canvas for the game -->
+    <canvas id="gameCanvas" width="0" height="0"></canvas>
+
+    <!-- Energy bar -->
+    <div class="energy-bar">
+      <div class="energy-bar-fill" style="width: 100%">ENERGY BAR</div>
+    </div>
+
+    <!-- Health bar -->
+    <div class="health-bar">
+      <div class="health-bar-fill" style="width: 100%">HEALTH BAR</div>
+    </div>
+
+    <!-- Game Settings -->
+    <div id="settings" class="settings">
+      <h3>Game Settings</h3>
+      <label>
+        Difficulty:
+        <select id="difficulty">
+          <option value="easy">Easy</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </label>
+      <label>
+        Volume:
+        <input type="range" id="volume" min="0" max="100" step="1" />
+      </label>
+    </div>
+
+    <!-- Game script -->
     <script src="main.js" defer></script>
   </body>
 </html>

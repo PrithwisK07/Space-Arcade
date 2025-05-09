@@ -2,8 +2,107 @@
 const canvas = document.querySelector("canvas");
 const context = canvas.getContext("2d");
 
-canvas.width = innerWidth;
-canvas.height = innerHeight;
+canvas.width = window.innerWidth * 0.9;
+canvas.height = window.innerHeight * 0.9;
+
+// Add event listener for zooming with the mouse wheel
+canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  if (event.deltaY < 0) {
+    // Zoom in
+    scaleFactor += 0.1;
+  } else {
+    // Zoom out
+    scaleFactor = Math.max(0.1, scaleFactor - 0.1); // Prevent negative or zero scale
+  }
+});
+
+// Initialize variables
+let score = 0;
+let highScore = localStorage.getItem("highScore") || 0; // Retrieve high score from localStorage
+let powerUpActive = false;
+let difficulty = "medium"; // Default difficulty
+let volume = 100; // Default volume
+
+// Function to update the score
+function updateScore(points) {
+  score += points;
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem("highScore", highScore); // Save high score to localStorage
+  }
+  document.getElementById("score").textContent = `Score: ${score}`;
+  document.getElementById(
+    "high-score"
+  ).textContent = `High Score: ${highScore}`;
+}
+
+// Function to draw the score and high score
+function drawScore() {
+  context.fillStyle = "white";
+  context.font = "20px Arial";
+  context.fillText(`Score: ${score}`, 10, 30);
+  context.fillText(`High Score: ${highScore}`, 10, 60);
+}
+
+// Power-up logic
+function activatePowerUp() {
+  powerUpActive = true;
+  setTimeout(() => {
+    powerUpActive = false;
+  }, 10000); // Power-up lasts for 10 seconds
+}
+
+// Handle difficulty changes
+const difficultySelector = document.getElementById("difficulty");
+difficultySelector.addEventListener("change", (event) => {
+  difficulty = event.target.value;
+  console.log(`Difficulty set to: ${difficulty}`);
+  // Adjust game parameters based on difficulty
+  if (difficulty === "easy") {
+    enemySpeed = 1;
+    spawnRate = 2000;
+  } else if (difficulty === "medium") {
+    enemySpeed = 2;
+    spawnRate = 1500;
+  } else if (difficulty === "hard") {
+    enemySpeed = 3;
+    spawnRate = 1000;
+  }
+});
+
+// Initialize audio elements
+const backgroundMusic = new Audio("assets/background-music.mp3");
+backgroundMusic.loop = true;
+backgroundMusic.volume = 0.5; // Default volume
+backgroundMusic.play();
+
+const shootSound = new Audio("assets/shoot.mp3");
+shootSound.volume = 0.5;
+
+const explosionSound = new Audio("assets/explosion.mp3");
+explosionSound.volume = 0.5;
+
+// Handle volume changes
+const volumeControl = document.getElementById("volume");
+volumeControl.value = 0.5; // Set initial volume
+volumeControl.addEventListener("input", (event) => {
+  const newVolume = parseFloat(event.target.value); // Get volume as a float between 0 and 1
+  backgroundMusic.volume = newVolume;
+  shootSound.volume = newVolume;
+  explosionSound.volume = newVolume;
+  console.log(`Volume set to: ${newVolume}`);
+});
+
+function playSound(sound) {
+  sound.currentTime = 0; // Reset sound
+  sound.play();
+}
+
+// Example: Play sound when shooting
+function shoot() {
+  playSound(shootSound);
+}
 
 // Player class
 class Player {
@@ -372,6 +471,57 @@ class Boss extends Invaders {
   }
 }
 
+class BossEnemy {
+  constructor() {
+    this.x = canvas.width / 2 - 50;
+    this.y = 50;
+    this.width = 100;
+    this.height = 100;
+    this.health = 500;
+  }
+
+  update() {
+    // Boss movement logic
+  }
+
+  draw(context) {
+    context.fillStyle = "purple";
+    context.fillRect(this.x, this.y, this.width, this.height);
+    context.fillStyle = "red";
+    context.fillRect(this.x, this.y - 10, (this.health / 500) * this.width, 5); // Health bar
+  }
+}
+
+class ShooterEnemy {
+  constructor(x, y, speed) {
+    this.x = x;
+    this.y = y;
+    this.speed = speed;
+    this.width = 30;
+    this.height = 30;
+    this.shootInterval = 2000; // Shoots every 2 seconds
+    this.lastShotTime = 0;
+  }
+
+  update(deltaTime) {
+    this.y += this.speed * deltaTime;
+    if (Date.now() - this.lastShotTime > this.shootInterval) {
+      this.shoot();
+      this.lastShotTime = Date.now();
+    }
+  }
+
+  shoot() {
+    // Add logic to shoot projectiles at the player
+    console.log("Shooter enemy fired!");
+  }
+
+  draw(context) {
+    context.fillStyle = "red";
+    context.fillRect(this.x, this.y, this.width, this.height);
+  }
+}
+
 // Enemy Waves - Grids
 class Grid {
   constructor(game) {
@@ -517,6 +667,39 @@ class Explosions {
 
   reset() {
     this.free = true;
+  }
+}
+
+class PowerUp {
+  constructor(x, y, type) {
+    this.x = x;
+    this.y = y;
+    this.type = type; // "shield", "double-damage", "speed-boost"
+    this.width = 20;
+    this.height = 20;
+  }
+
+  applyEffect(player) {
+    if (this.type === "shield") {
+      player.shieldActive = true;
+      setTimeout(() => (player.shieldActive = false), 10000); // Shield lasts 10 seconds
+    } else if (this.type === "double-damage") {
+      player.damageMultiplier = 2;
+      setTimeout(() => (player.damageMultiplier = 1), 10000); // Double damage lasts 10 seconds
+    } else if (this.type === "speed-boost") {
+      player.speed *= 2;
+      setTimeout(() => (player.speed /= 2), 10000); // Speed boost lasts 10 seconds
+    }
+  }
+
+  draw(context) {
+    context.fillStyle =
+      this.type === "shield"
+        ? "blue"
+        : this.type === "double-damage"
+        ? "yellow"
+        : "green";
+    context.fillRect(this.x, this.y, this.width, this.height);
   }
 }
 
@@ -666,6 +849,7 @@ function animate(timeStamp) {
   requestAnimationFrame(animate);
   context.clearRect(0, 0, canvas.width, canvas.height);
   game.render(deltaTime);
+  drawScore();
 }
 
 animate(0); // Initial call for the animate function

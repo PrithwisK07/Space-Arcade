@@ -1,0 +1,121 @@
+/* Global Styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Body Styles */
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  background-color: black;
+  color: white;
+  font-family: Arial, sans-serif;
+  overflow: hidden; /* Prevent scrolling */
+}
+
+/* Canvas Styles */
+canvas {
+  background: url("assets/background_1280x720.png") no-repeat center center;
+  background-size: cover;
+  border: 2px solid white;
+  display: block;
+}
+
+/* Energy Bar Styles */
+.energy-bar {
+  position: absolute;
+  bottom: 40px;
+  left: 90px;
+  width: 260px;
+  height: 30px;
+  border: 2px solid gold;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.energy-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, green, yellow, red);
+  transition: width 0.2s ease-in-out;
+}
+
+/* Health Bar Styles */
+.health-bar {
+  position: absolute;
+  bottom: 80px;
+  left: 90px;
+  width: 260px;
+  height: 30px;
+  border: 2px solid red;
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.health-bar-fill {
+  height: 100%;
+  background: linear-gradient(to right, red, orange);
+  transition: width 0.2s ease-in-out;
+  background: linear-gradient(to right, red, orange);
+  transition: width 0.2s ease-in-out;
+}
+
+/* Hidden Images (for sprites) */
+img {
+  position: absolute;
+  display: none;
+}
+
+/* Settings Menu */
+.settings {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 10px;
+  border: 2px solid white;
+  color: white;
+  font-size: 14px;
+  border-radius: 5px;
+}
+
+/* Score Display 
+#score-container {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+  font-size: 18px;
+  font-family: Arial, sans-serif;
+  text-align: left;
+}
+
+#score-container span {
+  display: block;
+  margin-bottom: 5px;
+}*/
+
+/* Game Settings */
+#settings {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: rgba(0, 0, 0, 0.8);
+  padding: 10px;
+  border: 2px solid white;
+  color: white;
+  font-size: 14px;
+  border-radius: 5px;
+  text-align: left;
+}
+
+#settings label {
+  display: block;
+  margin-bottom: 5px;
+}
+
+#settings select,
+#settings input[type="range"] {
+  width: 100%;
+}
